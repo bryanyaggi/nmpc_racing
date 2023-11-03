@@ -2,7 +2,7 @@
 from __future__ import division
 
 import sys
-sys.path.insert(1, "/home/gsilano/Pictures/Vittorio_ws/PANOC_DYNAMIC_MOTOR_MODEL/dynamic_my_optimizer/dynamic_racing_target_point")
+sys.path.insert(1, "/home/ubuntu/project/nmpc_racing/optimization/PANOC_DYNAMIC_MOTOR_MODEL/dynamic_my_optimizer/dynamic_racing_target_point")
 import dynamic_racing_target_point
 solver = dynamic_racing_target_point.solver()
 
@@ -78,28 +78,28 @@ def perception_target_point(X_odom,Y_odom,center_x,center_y,a):
 ############################################################################################################################################
 ############################################################################################################################################
 ############################################################################################################################################
-csv_file = np.genfromtxt('/home/gsilano/Pictures/Vittorio_ws/Map_track3/center_x_track3.csv', 
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/center_x_track3.csv', 
                           delimiter=',', dtype=float)
 center_x = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/gsilano/Pictures/Vittorio_ws/Map_track3/center_y_track3.csv', 
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/center_y_track3.csv', 
                           delimiter=',', dtype=float)
 center_y = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/gsilano/Pictures/Vittorio_ws/Map_track3/bound_x1_track3.csv', 
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_x1_track3.csv', 
                           delimiter=',', dtype=float)
 bound_x1 = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/gsilano/Pictures/Vittorio_ws/Map_track3/bound_y1_track3.csv', 
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_y1_track3.csv', 
                           delimiter=',', dtype=float)
 bound_y1 = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/gsilano/Pictures/Vittorio_ws/Map_track3/bound_x2_track3.csv', 
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_x2_track3.csv', 
                           delimiter=',', dtype=float)
 bound_x2 = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/gsilano/Pictures/Vittorio_ws/Map_track3/bound_y2_track3.csv', 
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_y2_track3.csv', 
                           delimiter=',', dtype=float)
 bound_y2 = csv_file[:].tolist()
 ############################################################################################################################################
 ############################################################################################################################################
 ############################################################################################################################################
-f = open('/home/gsilano/Desktop/race_DATA.csv', 'w')
+f = open('/home/ubuntu/project/nmpc_racing/data/race_DATA.csv', 'w')
 writer = csv.writer(f)
 
 rospy.init_node('my_mpc_node',anonymous = True)

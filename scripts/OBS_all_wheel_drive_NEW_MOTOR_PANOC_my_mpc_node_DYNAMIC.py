@@ -7,7 +7,7 @@ import sys
 WARNING: Update this path with the folder containing the built version of the
 optimization problem.
 """
-sys.path.insert(1, "/home/gsilano/Pictures/nmpc_ws/OBS_PANOC_DYNAMIC_MOTOR_MODEL/dynamic_my_optimizer/dynamic_racing_target_point")
+sys.path.insert(1, "/home/ubuntu/project/nmpc_racing/optimization/OBS_PANOC_DYNAMIC_MOTOR_MODEL/dynamic_my_optimizer/dynamic_racing_target_point")
 import dynamic_racing_target_point
 solver = dynamic_racing_target_point.solver()
 
@@ -89,22 +89,22 @@ def perception_target_point(X_odom,Y_odom,center_x,center_y,a):
 WARNING: Update these paths with the name of the folder containing the description of the track,
 i.e., where the car will race.
 """
-csv_file = np.genfromtxt('/home/gsilano/Desktop/DATA/Map_track1/center_x_track1.csv',
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track1/center_x_track1.csv',
                           delimiter=',', dtype=float)
 center_x = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/gsilano/Desktop/DATA/Map_track1/center_y_track1.csv',
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track1/center_y_track1.csv',
                           delimiter=',', dtype=float)
 center_y = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/gsilano/Desktop/DATA/Map_track1/bound_x1_track1.csv',
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track1/bound_x1_track1.csv',
                           delimiter=',', dtype=float)
 bound_x1 = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/gsilano/Desktop/DATA/Map_track1/bound_y1_track1.csv',
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track1/bound_y1_track1.csv',
                           delimiter=',', dtype=float)
 bound_y1 = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/gsilano/Desktop/DATA/Map_track1/bound_x2_track1.csv',
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track1/bound_x2_track1.csv',
                           delimiter=',', dtype=float)
 bound_x2 = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/gsilano/Desktop/DATA/Map_track1/bound_y2_track1.csv',
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track1/bound_y2_track1.csv',
                           delimiter=',', dtype=float)
 bound_y2 = csv_file[:].tolist()
 
@@ -132,7 +132,7 @@ obs_y_2 = -12.5
 WARNING: Update this path with the place where you want to save the csv files with the data
 retrieved from the F1/10 simulation.
 """
-f = open('/home/gsilano/Desktop/DATA/race_DATA.csv', 'w')
+f = open('/home/ubuntu/project/nmpc_racing/data/race_DATA.csv', 'w')
 writer = csv.writer(f)
 
 rospy.init_node('my_mpc_node',anonymous = True)

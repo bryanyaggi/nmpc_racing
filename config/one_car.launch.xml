@@ -24,11 +24,25 @@
     <arg name='run_camera' default='false' />
 
     <!-- launch map to  odom tf -->
+    <!--
     <node name='map_odom_link' pkg='tf' type='static_transform_publisher' args='0.0 0.0 0.0
                                  0.0 0.0 0.0
                                  map
                                  odom
                                  100' />
+    -->
+    <!-- world to map TF -->
+    <!--
+    <node name='world_map_tf' pkg='tf' type='static_transform_publisher' args='0.0 0.0 0.0 0.0 0.0 0.0 world map 100'/>
+    -->
+
+    <!-- fake localization -->
+    <node name='fake_localization' pkg='fake_localization' type='fake_localization'>
+      <remap from='base_pose_ground_truth' to='$(arg car_name)/ground_truth'/>
+      <param name='global_frame_id' value='world'/>
+      <param name='odom_frame_id' value='$(arg car_name)_base_link'/>
+      <param name='base_frame_id' value='$(arg car_name)_base_link'/>
+    </node>
 
     <!-- launch gazebo with track -->
     <include file='$(find gazebo_ros)/launch/empty_world.launch'>

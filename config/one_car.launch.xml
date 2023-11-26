@@ -12,6 +12,7 @@
   <arg name='remote_control' default='false' />
   <arg name='keyboard_control' default='false' />
   <arg name='world_name' default='bahrain_track' />
+  <arg name='run_rviz' default='true' />
 
   <!-- run gazebo by default only once -->
   <group if='$(arg run_gazebo)'>
@@ -49,6 +50,10 @@
       <arg name='world_name' value='$(find f1tenth-sim)/world/$(arg world_name).world' />
       <arg name='gui' value='$(arg gui)' />
     </include>
+  </group>
+
+  <group if='$(arg run_rviz)'>
+    <node name='rviz' pkg='rviz' type='rviz' args='-d $(find f1tenth-sim)/config/rviz.rviz' />
   </group>
 
   <!-- check if remote control is required -->

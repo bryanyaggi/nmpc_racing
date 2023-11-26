@@ -5,7 +5,7 @@ import sys
 sys.path.insert(1, "/home/ubuntu/project/nmpc_racing/optimization/PANOC_DYNAMIC_MOTOR_MODEL/dynamic_my_optimizer/dynamic_racing_target_point")
 import dynamic_racing_target_point
 
-from models import DynamicModel
+from models import DynamicModel, KinematicModel
 
 import rospy
 from geometry_msgs.msg import PointStamped, PoseStamped
@@ -16,8 +16,10 @@ import casadi.casadi as cs
 import numpy as np
 import math
 import csv
+import cvxpy as cp
 
 import unittest
+import matplotlib.pyplot as plt
 
 def euler_from_quaternion(x, y, z, w):
     """
@@ -82,6 +84,47 @@ def perception_target_point(X_odom,Y_odom,center_x,center_y,a):
 
     return target_point_x, target_point_y
 
+def get_closest_point_on_centerline(x, y, center_x, center_y):
+    dx = (x - np.array(center_x)) ** 2
+    dy = (y - np.array(center_y)) ** 2
+    dr = dx + dy
+
+    index = np.argmin(dr)
+    
+    return index
+
+'''
+Returns equally spaced points along centerline
+'''
+def sample_centerline(start_x, start_y, center_x, center_y, points_in=91, points_out=50):
+    # Get points along centerline
+    start_i = get_closest_point_on_centerline(start_x, start_y, center_x, center_y)
+    if start_i + points_in < len(center_x):
+        segment_center_x = center_x[start_i:start_i+points_in]
+        segment_center_y = center_y[start_i:start_i+points_in]
+    else:
+        end_i = points_in - (len(center_x) - 1 - start_i)
+        segment_center_x = center_x[start_i:] + center_x[:end_i]
+        segment_center_y = center_y[start_i:] + center_y[:end_i]
+
+    segment_center_x = np.array(segment_center_x)
+    segment_center_y = np.array(segment_center_y)
+    dx, dy = segment_center_x[1:] - segment_center_x[:-1], segment_center_y[1:] - segment_center_y[:-1]
+    ds = np.array((0, *np.sqrt(dx**2 + dy**2))) # distance along path between points
+    s = np.cumsum(ds) # distance from start
+
+    spacing = s[-1] / points_out
+    x = np.interp(np.arange(0, s[-1] + spacing, spacing), s, segment_center_x)
+    y = np.interp(np.arange(0, s[-1] + spacing, spacing), s, segment_center_y)
+
+    return x, y
+
+def get_path_yaw(path_x, path_y):
+    dx, dy = path_x[1:] - path_x[:-1], path_y[1:] - path_y[:-1]
+    yaw = np.arctan2(dy, dx)
+
+    return yaw
+    
 '''
 Create path message from path x, y coordinates
 '''
@@ -97,118 +140,6 @@ def xy_to_path(xs, ys, frame='world'):
 
     return path
 
-
-############################################################################################################################################
-############################################################################################################################################
-############################################################################################################################################
-csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/center_x_track3.csv', 
-                          delimiter=',', dtype=float)
-center_x = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/center_y_track3.csv', 
-                          delimiter=',', dtype=float)
-center_y = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_x1_track3.csv', 
-                          delimiter=',', dtype=float)
-bound_x1 = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_y1_track3.csv', 
-                          delimiter=',', dtype=float)
-bound_y1 = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_x2_track3.csv', 
-                          delimiter=',', dtype=float)
-bound_x2 = csv_file[:].tolist()
-csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_y2_track3.csv', 
-                          delimiter=',', dtype=float)
-bound_y2 = csv_file[:].tolist()
-############################################################################################################################################
-############################################################################################################################################
-############################################################################################################################################
-f = open('/home/ubuntu/project/nmpc_racing/data/race_DATA.csv', 'w')
-writer = csv.writer(f)
-
-rospy.init_node('my_mpc_node',anonymous = True)
-
-LRW_topic   = '/car_1/left_rear_wheel_velocity_controller/command'
-RRW_topic   = '/car_1/right_rear_wheel_velocity_controller/command'
-LFW_topic   = '/car_1/left_front_wheel_velocity_controller/command'
-RFW_topic   = '/car_1/right_front_wheel_velocity_controller/command'
-LSH_topic   = '/car_1/left_steering_hinge_position_controller/command'
-RSH_topic   = '/car_1/right_steering_hinge_position_controller/command'
-
-# Command publishers
-pub_vel_LRW = rospy.Publisher(LRW_topic, Float64, queue_size = 1)
-pub_vel_RRW = rospy.Publisher(RRW_topic, Float64, queue_size = 1)
-pub_vel_LFW = rospy.Publisher(LFW_topic, Float64, queue_size = 1)
-pub_vel_RFW = rospy.Publisher(RFW_topic, Float64, queue_size = 1)
-pub_pos_LSH = rospy.Publisher(LSH_topic, Float64, queue_size = 1)
-pub_pos_RSH = rospy.Publisher(RSH_topic, Float64, queue_size = 1)
-
-# RViz publishers
-pub_target_point = rospy.Publisher('/car_1/target_point', PointStamped, queue_size=1)
-pub_target_path = rospy.Publisher('/car_1/target_path', Path, queue_size=1)
-pub_target_path_projection = rospy.Publisher('/car_1/target_path_projection', Path, queue_size=1, latch=True)
-pub_centerline = rospy.Publisher('/road/centerline', Path, queue_size=1, latch=True)
-pub_bound1 = rospy.Publisher('/road/bound1', Path, queue_size=1, latch=True)
-pub_bound2 = rospy.Publisher('/road/bound2', Path, queue_size=1, latch=True)
-
-steering_angle_msg = Float64()
-velocity_msg = Float64()
-
-target_point_display = PointStamped()
-target_point_display.header.frame_id = 'world'
-
-# Publish road
-pub_centerline.publish(xy_to_path(center_x, center_y))
-pub_bound1.publish(xy_to_path(bound_x1, bound_y1))
-pub_bound2.publish(xy_to_path(bound_x2, bound_y2))
-
-# State publisher
-pub_state = rospy.Publisher('/car_1/state', Float64MultiArray, queue_size=1)
-state_msg = Float64MultiArray()
-state_msg.data = [0.0] * 6
-
-rate = rospy.Rate(30)
-
-#nmpc = NMPC()
-
-'''
-N = 50
-T = 0.033
-
-lr = 0.147;
-lf = 0.178;
-m  = 5.6922;
-Iz  = 0.204;
-df= 134.585
-dr= 159.9198
-cf= 0.085915
-cr= 0.13364
-bf= 9.2421
-br= 17.7164
-Cm1= 20
-Cm2= 6.9281e-07
-Cm3= 3.9901
-Cm4= 0.66633
-n_states = 6
-n_controls = 2
-
-mpciter = 0
-u_cl1 = 0
-u_cl2 = 0
-xx1 = np.empty(N+1)
-xx2 = np.empty(N+1)
-xx3 = np.empty(N+1)
-xx4 = np.empty(N+1)
-xx5 = np.empty(N+1)
-xx6 = np.empty(N+1)
-x0 = [0, 0, 0, 1, 0, 0]		# initial conditions
-guess = [0.0]*(2*N)
-theta2unwrap = []
-'''
-
-#################################################################################################################################
-#################################################################################################################################
-#################################################################################################################################
-
 def control_vehicle(velocity, steering_angle):
     velocity_msg.data = velocity
     steering_angle_msg.data = steering_angle
@@ -218,37 +149,6 @@ def control_vehicle(velocity, steering_angle):
     pub_vel_RFW.publish(velocity_msg)
     pub_vel_LRW.publish(velocity_msg)
     pub_vel_RRW.publish(velocity_msg)
-
-def cvxopt(model, state, prev_control, target_point, operating_points, horizon):
-    x = cp.Variable((4, horizon + 1))
-    u = cp.Variable((2, horizon))
-
-    Q1 = np.eye(2) * 10
-    Q2 = np.eye(2) * 10
-
-    cost = 0
-    constraints = []
-    for i in range(H):
-        A, B, C = model.get_linear_model()
-        constraints += [x[:, t + 1] == A @ x[:, t] + B @ u[:, t] + C] # dynamics
-
-        # control change cost
-        if i == 0:
-            cost += cp.quad_form(u[:, t] - prev_control, Q2)
-        else:
-            cost += cp.quad_form(u[:, t] - u[:, t - 1], Q2)
-
-    cost += cp.quad_form(x[:2, H - 1] - target_point, Q1) # final point cost
-
-    constraints += [x[:, 0] == state] # initial state
-    #constraints += # stay on track
-    constraints += [u[0, :] >= 0] # velocity limits
-    constraints += [u[0, :] <= 5]
-    constraints += [u[0, :] >= -math.pi / 6] # steering angle limits
-    constraints += [u[0, :] <= math.pi / 6]
-
-    problem = cp.Problem(cp.Minimize(cost), constraints)
-    problem.solve()
 
 class NMPC:
     def __init__(self):
@@ -304,7 +204,8 @@ class NMPC:
             self.proj_center_X = proj_center[0]
             self.proj_center_Y = proj_center[1]
         else:
-            proj_center = find_the_center_line(self.xx1[1:self.N+1], self.xx2[1:self.N+1], center_x, center_y)
+            #proj_center = find_the_center_line(self.xx1[1:self.N+1], self.xx2[1:self.N+1], center_x, center_y)
+            proj_center = find_the_center_line(self.xx1[1:], self.xx2[1:], center_x, center_y)
             self.proj_center_X = proj_center[0]
             self.proj_center_Y = proj_center[1]
 
@@ -346,7 +247,242 @@ class NMPC:
         self.model.rollout(self.x0, self.guess, self.N, self.T, self.xx1, self.xx2, self.xx3, self.xx4, self.xx5, self.xx6)
         self.mpciter += 1
 
+class MPC:
+    def __init__(self):
+        self.model = KinematicModel()
+        self.horizon = 50
+        self.dt = 0.033
+        self.rollout_controls = np.zeros((2, self.horizon))
+        self.rollout_states = np.zeros((3, self.horizon + 1))
+        self.operating_point_states = None
+        self.operating_point_controls = None
+        self.proj_center_x = None
+        self.proj_center_y = None
+        self.target_point = None
+        self.state = np.zeros(3)
+        self.iter = 0
+
+    def get_state(self, odom):
+        self.state[0] = odom.pose.pose.position.x
+        self.state[1] = odom.pose.pose.position.y
+        _, _, yaw = euler_from_quaternion(odom.pose.pose.orientation.x, odom.pose.pose.orientation.y,
+                odom.pose.pose.orientation.z, odom.pose.pose.orientation.w)
+        if yaw < -math.pi:
+            yaw += 2 * math.pi
+        elif yaw > math.pi:
+            yaw -= 2 * math.pi
+        self.state[2] = yaw
+
+    def get_operating_points(self):
+        if self.iter < 1:
+            self.operating_point_states = np.zeros((3, self.horizon))
+            path = sample_centerline(self.state[0], self.state[1], center_x, center_y)
+            self.operating_point_states[0], self.operating_point_states[1] = path[0][:-1], path[1][:-1]
+            self.operating_point_states[2, :-1] = get_path_yaw(self.operating_point_states[0],
+                    self.operating_point_states[1])
+            self.operating_point_states[2, -1] = self.operating_point_states[2, -2]
+            self.operating_point_controls = np.ones((2, self.horizon))
+            self.operating_point_controls[0] *= 3.0
+            self.operating_point_controls[1] *= 0.0
+        else:
+            self.operating_point_states = self.rollout_states[:, 1:]
+            self.operating_point_controls[:, :-1] = self.rollout_controls[:, 1:]
+            self.operating_point_controls[:, -1] = self.rollout_controls[:, -1]
+
+    def project_rollout_to_centerline(self, center_x, center_y):
+        if self.iter < 1:
+            '''
+            proj_center = find_the_center_line(np.linspace(0, 1, self.N), np.zeros(self.N), center_x, center_y)
+            self.proj_center_x = proj_center[0]
+            self.proj_center_y = proj_center[1]
+            '''
+            self.proj_center_x, self.proj_center_y = sample_centerline(self.state[0], self.state[1], center_x, center_y)
+        else:
+            proj_center = find_the_center_line(self.xx1[1:], self.xx2[1:], center_x, center_y)
+            self.proj_center_x = proj_center[0]
+            self.proj_center_y = proj_center[1]
+
+    def get_target_point(self, center_x, center_y):
+        self.target_point = perception_target_point(self.state[0], self.state[1], center_x, center_y, 90)
+
+    def solve_optimization(self):
+        if self.iter < 1:
+            prev_control = np.zeros(2)
+        else:
+            prev_control = self.rollout_controls[:, 0]
+        t0 = time.time()
+        status, self.rollout_controls = cvxopt(self.model, self.state, prev_control, self.target_point,
+                self.operating_point_states, self.operating_point_controls)
+        print('MPC optimization time: %f' %(time.time() - t0))
+        print('MPC status: %s' %status)
+
+    '''
+    Updates rollout states using model and rollout controls
+    '''
+    def trajectory_rollout(self):
+        self.model.rollout(self.state, self.rollout_controls, self.rollout_states)
+    
+    def run(self, odom):
+        # Get state from odometry
+        self.get_state(odom)
+
+        # Get operating points
+        self.get_operating_points()
+
+        # Project rollout path to centerline
+        self.project_rollout_to_centerline(center_x, center_y)
+
+        # Get target point
+        self.get_target_point(center_x, center_y)
+
+        # Construct and solve optimization
+        self.solve_optimization()
+
+        # Trajectory rollout
+        self.trajectory_rollout(self.state)
+
+        self.iter += 1 # increment interation variable
+
+        # Control vehicle
+
+def cvxopt(model, state, prev_control, target_point, operating_point_states, operating_point_controls):
+    horizon = operating_point_states.shape[1]
+    x = cp.Variable((3, horizon + 1))
+    u = cp.Variable((2, horizon))
+
+    Q1 = np.eye(2) * 10
+    Q2 = np.eye(2) * 10
+
+    cost = 0
+    constraints = []
+    for i in range(horizon):
+        yaw = operating_point_states[2, i]
+        velocity = operating_point_controls[0, i]
+        steering_angle = operating_point_controls[1, i]
+        A, B, C = model.get_linear_model(yaw, velocity, steering_angle)
+        constraints += [x[:, i + 1] == A @ x[:, i] + B @ u[:, i] + C] # dynamics
+
+        # control change cost
+        if i == 0:
+            cost += cp.quad_form(u[:, i] - prev_control, Q2)
+        else:
+            cost += cp.quad_form(u[:, i] - u[:, i - 1], Q2)
+
+    cost += cp.quad_form(x[:2, horizon - 1] - target_point, Q1) # final point cost
+
+    constraints += [x[:, 0] == state] # initial state
+    #constraints += # stay on track
+    constraints += [u[0, :] >= 0] # velocity limits
+    constraints += [u[0, :] <= 5]
+    constraints += [u[1, :] >= -math.pi / 6] # steering angle limits
+    constraints += [u[1, :] <= math.pi / 6]
+
+    problem = cp.Problem(cp.Minimize(cost), constraints)
+    problem.solve()
+
+    return problem.status, u.value
+
+    # return controls?
+
+class Test(unittest.TestCase):
+    def testSampleCenterline(self):
+        x, y = 0, 0
+        path_x, path_y = sample_centerline(x, y, center_x, center_y)
+        print(path_x)
+        print(path_y)
+
+        fig, ax = plt.subplots()
+        ax.plot(center_x, center_y, color='black')
+        ax.plot(path_x, path_y, color='blue')
+        plt.show()
+
+    def testGetPathYaw(self):
+        x, y = 0, 0
+        path_x, path_y = sample_centerline(0, 0, center_x, center_y)
+        print(path_x)
+        print(path_y)
+
+        yaw = get_path_yaw(path_x, path_y)
+        print(yaw)
+
+        fig, ax = plt.subplots()
+        ax.plot(path_x, path_y)
+        ax.axis('equal')
+        plt.show()
+
+# Get track data from CSV files
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/center_x_track3.csv', 
+                          delimiter=',', dtype=float)
+center_x = csv_file[:].tolist()
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/center_y_track3.csv', 
+                          delimiter=',', dtype=float)
+center_y = csv_file[:].tolist()
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_x1_track3.csv', 
+                          delimiter=',', dtype=float)
+bound_x1 = csv_file[:].tolist()
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_y1_track3.csv', 
+                          delimiter=',', dtype=float)
+bound_y1 = csv_file[:].tolist()
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_x2_track3.csv', 
+                          delimiter=',', dtype=float)
+bound_x2 = csv_file[:].tolist()
+csv_file = np.genfromtxt('/home/ubuntu/project/nmpc_racing/optimization/Map_track3/bound_y2_track3.csv', 
+                          delimiter=',', dtype=float)
+bound_y2 = csv_file[:].tolist()
+
+# Open log file
+f = open('/home/ubuntu/project/nmpc_racing/data/race_DATA.csv', 'w')
+writer = csv.writer(f)
+
+rospy.init_node('my_mpc_node',anonymous = True)
+
+LRW_topic = '/car_1/left_rear_wheel_velocity_controller/command'
+RRW_topic = '/car_1/right_rear_wheel_velocity_controller/command'
+LFW_topic = '/car_1/left_front_wheel_velocity_controller/command'
+RFW_topic = '/car_1/right_front_wheel_velocity_controller/command'
+LSH_topic = '/car_1/left_steering_hinge_position_controller/command'
+RSH_topic = '/car_1/right_steering_hinge_position_controller/command'
+
+# Command publishers
+pub_vel_LRW = rospy.Publisher(LRW_topic, Float64, queue_size = 1)
+pub_vel_RRW = rospy.Publisher(RRW_topic, Float64, queue_size = 1)
+pub_vel_LFW = rospy.Publisher(LFW_topic, Float64, queue_size = 1)
+pub_vel_RFW = rospy.Publisher(RFW_topic, Float64, queue_size = 1)
+pub_pos_LSH = rospy.Publisher(LSH_topic, Float64, queue_size = 1)
+pub_pos_RSH = rospy.Publisher(RSH_topic, Float64, queue_size = 1)
+
+# RViz publishers
+pub_target_point = rospy.Publisher('/car_1/target_point', PointStamped, queue_size=1)
+pub_rollout_path = rospy.Publisher('/car_1/rollout_path', Path, queue_size=1)
+pub_rollout_path_mpc = rospy.Publisher('/car_1/rollout_path_mpc', Path, queue_size=1)
+pub_rollout_path_projection = rospy.Publisher('/car_1/rollout_path_projection', Path, queue_size=1, latch=True)
+pub_centerline = rospy.Publisher('/road/centerline', Path, queue_size=1, latch=True)
+pub_bound1 = rospy.Publisher('/road/bound1', Path, queue_size=1, latch=True)
+pub_bound2 = rospy.Publisher('/road/bound2', Path, queue_size=1, latch=True)
+pub_east = rospy.Publisher('/east', Path, queue_size=1, latch=True)
+pub_center_path = rospy.Publisher('/car_1/center_path', Path, queue_size=1)
+
+steering_angle_msg = Float64()
+velocity_msg = Float64()
+
+target_point_display = PointStamped()
+target_point_display.header.frame_id = 'world'
+
+# Publish road
+pub_centerline.publish(xy_to_path(center_x, center_y))
+pub_bound1.publish(xy_to_path(bound_x1, bound_y1))
+pub_bound2.publish(xy_to_path(bound_x2, bound_y2))
+pub_east.publish(xy_to_path([i for i in range(5)], [0 for i in range(5)]))
+
+# State publisher
+pub_state = rospy.Publisher('/car_1/state', Float64MultiArray, queue_size=1)
+state_msg = Float64MultiArray()
+state_msg.data = [0.0] * 6
+
+rate = rospy.Rate(30)
+
 nmpc = NMPC()
+mpc = MPC()
 
 def callback(data):
     now_rostime = rospy.get_rostime()
@@ -354,22 +490,40 @@ def callback(data):
 
     # Get state
     nmpc.get_state(data)
+    mpc.get_state(data)
+    print(mpc.state)
     state_msg.data = [x for x in nmpc.x0]
     pub_state.publish(state_msg)
+
+    # Get operating points
+    mpc.get_operating_points()
     
-    # Get rollout path projected on centerline
+    # Get rollout path projected on centerline for optimization track constraint
     nmpc.project_rollout_to_centerline(center_x, center_y)
-    
-    pub_target_path_projection.publish(xy_to_path(nmpc.proj_center_X, nmpc.proj_center_Y))
+    pub_rollout_path_projection.publish(xy_to_path(nmpc.proj_center_X, nmpc.proj_center_Y))
+    #proj_x, proj_y = sample_centerline(state[0], state[1], center_x, center_y)
+    #pub_center_path.publish(xy_to_path(proj_x, proj_y))
 
     # Get target point
     nmpc.get_target_point(center_x, center_y)
+    mpc.get_target_point(center_x, center_y)
     target_point_display.point.x = nmpc.target_point[0]
     target_point_display.point.y = nmpc.target_point[1]
     pub_target_point.publish(target_point_display)
 
     # Solve optimization
-    result = nmpc.solve_optimization()
+    nmpc.solve_optimization()
+    mpc.solve_optimization()
+    print('Solved MPC optimization!')
+
+    # Convert controls for MPC
+    '''
+    mpc.rollout_controls[0] = [5 * x for x in nmpc.guess[0::2]]
+    mpc.rollout_controls[1] = nmpc.guess[1::2]
+    '''
+    mpc.trajectory_rollout()
+
+    mpc.iter += 1
 
     # Simulate dynamics using optimization result u*
     nmpc.trajectory_rollout()
@@ -378,74 +532,13 @@ def callback(data):
     steering_angle = nmpc.u_cl2
     control_vehicle(velocity, steering_angle)
 
-    pub_target_path.publish(xy_to_path(nmpc.xx1, nmpc.xx2))
+    pub_rollout_path.publish(xy_to_path(nmpc.xx1, nmpc.xx2))
+    pub_rollout_path_mpc.publish(xy_to_path(mpc.rollout_states[0], mpc.rollout_states[1]))
 
     # Update log
     row = [nmpc.x0[0], nmpc.x0[1], nmpc.x0[2], nmpc.x03, nmpc.x0[4], nmpc.x0[5], nmpc.elapsed, nmpc.u_cl1, nmpc.u_cl2, now_rostime]
     writer.writerow(row)
 
-    rate.sleep()
-
-def callback_(data):
-    global mpciter
-    global u_cl1, u_cl2, xx1, xx2, xx3, xx4, xx5, xx6, x0, guess
-
-    now_rostime = rospy.get_rostime()
-    rospy.loginfo("Current time %f", now_rostime.secs)
-
-    # Get state
-    x0 = get_state(data)
-    x03 = x0[3]
-    if mpciter < 15:
-        x0[3] = 3
-    state_msg.data = [x for x in x0]
-    pub_state.publish(state_msg)
-    
-    # Get rollout path projected on centerline
-    if mpciter < 1:
-        proj_center = find_the_center_line(np.linspace(0, 1, N), np.zeros(N), center_x, center_y)
-        proj_center_X = proj_center[0]
-        proj_center_Y = proj_center[1]
-        pub_target_path_projection.publish(xy_to_path(proj_center_X, proj_center_Y))
-    else:
-        proj_center = find_the_center_line(xx1[1:N+1], xx2[1:N+1], center_x, center_y)
-        proj_center_X = proj_center[0]
-        proj_center_Y = proj_center[1]
-    
-    #pub_target_path_projection.publish(xy_to_path(proj_center_X, proj_center_Y))
-
-    # Get target point
-    target_point = perception_target_point(x0[0], x0[1], center_x, center_y, 90)
-    target_point_display.point.x = target_point[0]
-    target_point_display.point.y = target_point[1]
-    pub_target_point.publish(target_point_display)
-
-    # Solve optimization
-    t0 = time.time()
-    result = ncvxopt(x0, proj_center_X, proj_center_Y, target_point, guess)
-    elapsed = time.time() - t0
-    print(elapsed)
-
-    u_star = np.full(n_controls*N,result.solution)
-    guess = u_star
-
-    u_cl1 = u_star[0]
-    u_cl2 = u_star[1]
-
-    # Simulate dynamics using optimization result u*
-    rollout()
-
-    velocity = u_cl1 * 100
-    steering_angle = u_cl2
-    control_vehicle(velocity, steering_angle)
-
-    pub_target_path.publish(xy_to_path(xx1, xx2))
-
-    # Update log
-    row = [x0[0], x0[1], x0[2], x03, x0[4], x0[5],elapsed,u_cl1,u_cl2,now_rostime]
-    writer.writerow(row)
-
-    mpciter = mpciter+1
     rate.sleep()
 
 if __name__ == '__main__':

@@ -9,14 +9,14 @@ class KinematicModel:
         self.lf = 0.178
         self.L = self.lr + self.lf
 
-    def step(self, state, velocity, steering_angle, dt=0.033):
-        slip_angle = math.atan(self.lr / (self.lr + self.lf) * math.tan(steering_angle))
+    def step(self, state, control, dt=0.033):
+        slip_angle = math.atan(self.lr / (self.lr + self.lf) * math.tan(control[1]))
 
         next_state = np.zeros(state.shape)
-        next_state[0] = state[0] + velocity * math.cos(state[2] + slip_angle) * dt
-        next_state[1] = state[1] + velocity * math.sin(state[2] + slip_angle) * dt
-        #next_state[2] = state[2] + velocity * math.sin(slip_angle) / self.lr * dt
-        next_state[2] = state[2] + velocity * math.cos(slip_angle) * math.tan(steering_angle) \
+        next_state[0] = state[0] + control[0] * math.cos(state[2] + slip_angle) * dt
+        next_state[1] = state[1] + control[0] * math.sin(state[2] + slip_angle) * dt
+        #next_state[2] = state[2] + control[0] * math.sin(slip_angle) / self.lr * dt
+        next_state[2] = state[2] + control[0] * math.cos(slip_angle) * math.tan(control[1]) \
                 / (self.lr + self.lf) * dt
         
         return next_state
@@ -60,8 +60,11 @@ class KinematicModel:
 
         return A, B, C
 
-    def rollout(self, state, control_sequence, steps):
-        return states
+    def rollout(self, state, rollout_controls, rollout_states, dt=0.033):
+        rollout_states[:, 0] = state
+
+        for i in range(rollout_states.shape[1] - 1):
+            rollout_states[:, i + 1] = self.step(rollout_states[:, i], rollout_controls[:, i], dt=dt)
 
 class DynamicModel:
     def __init__(self):

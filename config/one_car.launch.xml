@@ -21,7 +21,7 @@
     <param name='use_sim_time' value='true' />
 
     <!-- simulator arguments -->
-    <arg name='gui' default='true' />
+    <arg name='gui' default='false' />
     <arg name='run_camera' default='false' />
 
     <!-- launch map to  odom tf -->

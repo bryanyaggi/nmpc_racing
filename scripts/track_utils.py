@@ -3,6 +3,26 @@ import numpy as np
 
 import unittest
 
+'''
+Get track data from CSV files
+'''
+def get_track_data(track_number='1'):
+    directory = '/home/ubuntu/project/nmpc_racing/optimization/Map_track' + track_number + '/'
+    csv_file = np.genfromtxt(directory + 'center_x_track' + track_number + '.csv', delimiter=',', dtype=float)
+    center_x = csv_file[:].tolist()
+    csv_file = np.genfromtxt(directory + 'center_y_track' + track_number + '.csv', delimiter=',', dtype=float)
+    center_y = csv_file[:].tolist()
+    csv_file = np.genfromtxt(directory + 'bound_x1_track' + track_number + '.csv', delimiter=',', dtype=float)
+    bound_x1 = csv_file[:].tolist()
+    csv_file = np.genfromtxt(directory + 'bound_y1_track' + track_number + '.csv', delimiter=',', dtype=float)
+    bound_y1 = csv_file[:].tolist()
+    csv_file = np.genfromtxt(directory + 'bound_x2_track' + track_number + '.csv', delimiter=',', dtype=float)
+    bound_x2 = csv_file[:].tolist()
+    csv_file = np.genfromtxt(directory + 'bound_y2_track' + track_number + '.csv', delimiter=',', dtype=float)
+    bound_y2 = csv_file[:].tolist()
+
+    return center_x, center_y, bound_x1, bound_y1, bound_x2, bound_y2
+
 def euler_from_quaternion(x, y, z, w):
     """
     Convert a quaternion into euler angles (roll, pitch, yaw)

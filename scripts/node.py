@@ -38,24 +38,32 @@ def control_vehicle(velocity, steering_angle):
     pub_vel_LRW.publish(velocity_msg)
     pub_vel_RRW.publish(velocity_msg)
 
-# Get track data from CSV files
-track_number = '2'
-directory = '/home/ubuntu/project/nmpc_racing/optimization/Map_track' + track_number + '/'
-csv_file = np.genfromtxt(directory + 'center_x_track' + track_number + '.csv', delimiter=',', dtype=float)
-center_x = csv_file[:].tolist()
-csv_file = np.genfromtxt(directory + 'center_y_track' + track_number + '.csv', delimiter=',', dtype=float)
-center_y = csv_file[:].tolist()
-csv_file = np.genfromtxt(directory + 'bound_x1_track' + track_number + '.csv', delimiter=',', dtype=float)
-bound_x1 = csv_file[:].tolist()
-csv_file = np.genfromtxt(directory + 'bound_y1_track' + track_number + '.csv', delimiter=',', dtype=float)
-bound_y1 = csv_file[:].tolist()
-csv_file = np.genfromtxt(directory + 'bound_x2_track' + track_number + '.csv', delimiter=',', dtype=float)
-bound_x2 = csv_file[:].tolist()
-csv_file = np.genfromtxt(directory + 'bound_y2_track' + track_number + '.csv', delimiter=',', dtype=float)
-bound_y2 = csv_file[:].tolist()
+'''
+Get track data from CSV files
+'''
+def get_track_data(track_number='1'):
+    directory = '/home/ubuntu/project/nmpc_racing/optimization/Map_track' + track_number + '/'
+    csv_file = np.genfromtxt(directory + 'center_x_track' + track_number + '.csv', delimiter=',', dtype=float)
+    center_x = csv_file[:].tolist()
+    csv_file = np.genfromtxt(directory + 'center_y_track' + track_number + '.csv', delimiter=',', dtype=float)
+    center_y = csv_file[:].tolist()
+    csv_file = np.genfromtxt(directory + 'bound_x1_track' + track_number + '.csv', delimiter=',', dtype=float)
+    bound_x1 = csv_file[:].tolist()
+    csv_file = np.genfromtxt(directory + 'bound_y1_track' + track_number + '.csv', delimiter=',', dtype=float)
+    bound_y1 = csv_file[:].tolist()
+    csv_file = np.genfromtxt(directory + 'bound_x2_track' + track_number + '.csv', delimiter=',', dtype=float)
+    bound_x2 = csv_file[:].tolist()
+    csv_file = np.genfromtxt(directory + 'bound_y2_track' + track_number + '.csv', delimiter=',', dtype=float)
+    bound_y2 = csv_file[:].tolist()
+
+    return center_x, center_y, bound_x1, bound_y1, bound_x2, bound_y2
+
+# Get track data
+center_x, center_y, bound_x1, bound_y1, bound_x2, bound_y2 = get_track_data('1')
 
 # Open log file
-f = open('/home/ubuntu/project/nmpc_racing/data/race_DATA.csv', 'w')
+#f = open('/home/ubuntu/project/nmpc_racing/data/race_DATA.csv', 'w')
+f = open('/home/ubuntu/project/nmpc_racing/data/nmpc_' + track_number + '.csv', 'w')
 writer = csv.writer(f)
 
 rospy.init_node('my_mpc_node',anonymous = True)
@@ -140,10 +148,16 @@ def runNMPC(data):
     steering_angle = nmpc.u_cl2
     control_vehicle(velocity, steering_angle)
 
+    # Print lateral acceleration
+    #a_lat = nmpc.model.lateral_acceleration(nmpc.x0, (nmpc.u_cl1, nmpc.u_cl2))
+    #print(a_lat)
+
     pub_rollout_path.publish(xy_to_path(nmpc.xx1, nmpc.xx2))
 
     # Update log
-    row = [nmpc.x0[0], nmpc.x0[1], nmpc.x0[2], nmpc.x03, nmpc.x0[4], nmpc.x0[5], nmpc.elapsed, nmpc.u_cl1, nmpc.u_cl2, now_rostime]
+    #row = [nmpc.x0[0], nmpc.x0[1], nmpc.x0[2], nmpc.x03, nmpc.x0[4], nmpc.x0[5], nmpc.elapsed, nmpc.u_cl1, nmpc.u_cl2, now_rostime]
+    row = [now_rostime, nmpc.x0[0], nmpc.x0[1], nmpc.x0[2], nmpc.x03, nmpc.x0[4], nmpc.x0[5], nmpc.u_cl1, nmpc.u_cl2,
+            nmpc.elapsed]
     writer.writerow(row)
     
     rate.sleep()
@@ -182,7 +196,7 @@ def runNMPCKinematic(data):
     pub_rollout_path.publish(xy_to_path(nmpck.xx1, nmpck.xx2))
 
     # Update log
-    row = [nmpck.x0[0], nmpck.x0[1], nmpck.x0[2], nmpck.elapsed, nmpck.u_cl1, nmpck.u_cl2, now_rostime]
+    row = [now_rostime, nmpck.x0[0], nmpck.x0[1], nmpck.x0[2], nmpck.u_cl1, nmpck.u_cl2, nmpck.elapsed]
     writer.writerow(row)
     
     rate.sleep()
@@ -255,6 +269,6 @@ def callback(data):
 
 if __name__ == '__main__':
     #rospy.Subscriber("/car_1/ground_truth", Odometry, callback, queue_size=1)
-    #rospy.Subscriber("/car_1/ground_truth", Odometry, runNMPC, queue_size=1)
-    rospy.Subscriber("/car_1/ground_truth", Odometry, runNMPCKinematic, queue_size=1)
+    rospy.Subscriber("/car_1/ground_truth", Odometry, runNMPC, queue_size=1)
+    #rospy.Subscriber("/car_1/ground_truth", Odometry, runNMPCKinematic, queue_size=1)
     rospy.spin()

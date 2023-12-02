@@ -65,7 +65,8 @@ for i in range(N):
     st3 = X[n_states * i + 2]
     con1 = U[n_controls * i]
     con2 = U[n_controls * i + 1]
-    obj = obj + 10 * (con1 - preU1) ** 2 + 10 * (con2 - preU2) ** 2 # control change cost
+    #obj = obj + 10 * (con1 - preU1) ** 2 + 10 * (con2 - preU2) ** 2 # control change cost
+    obj = obj + 0 * (con1 - preU1) ** 2 + 10 * (con2 - preU2) ** 2 # control change cost
     f_value = f(st1, st2, st3, con1, con2)
     st_next1 = st1 + T * f_value[0]
     st_next2 = st2 + T * f_value[1]
@@ -75,6 +76,7 @@ for i in range(N):
     X[n_states * (i + 1) + 2] = st_next3
     f1 = cs.vertcat(f1, (st1 - P[2 * (i + 1) + 5]) ** 2 + (st2 - P[2 * (i + 1) + 6]) ** 2)
     f1 = cs.vertcat(f1, con1 - preU1, con2 - preU2)
+    f1 = cs.vertcat(f1, con1 ** 2 / lr * cs.sin(cs.atan(lr / (lr + lf) * cs.tan(con2)))) # lateral acceleration
     preU1 = con1
     preU2 = con2
     #obj = obj + (((-cs.atan((st5+lf*st6)/st4)+con2)) - (-cs.atan((st5-lr*st6)/st4)))**2 # slip ratio difference cost
@@ -87,8 +89,9 @@ bounds = og.constraints.Rectangle(umin, umax)
 
 deltau1 = 0.5
 deltau2 = 0.025 #0.025
-bmin = [0, -deltau1, -deltau2] * N
-bmax = [security_distance, deltau1, deltau2] * N
+alatmax = 0.5 * 9.81
+bmin = [0, -deltau1, -deltau2, -alatmax] * N
+bmax = [security_distance, deltau1, deltau2, alatmax] * N
 set_c = og.constraints.Rectangle(bmin, bmax)
 
 problem = og.builder.Problem(U, P, obj).with_aug_lagrangian_constraints(f1, set_c).with_constraints(bounds)

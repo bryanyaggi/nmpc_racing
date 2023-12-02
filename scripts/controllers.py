@@ -96,16 +96,17 @@ class NMPC:
             parameter.append(self.proj_center_X[i])
             parameter.append(self.proj_center_Y[i])
 
-        now = time.time()
+        t0 = time.time()
         result = self.solver.run(p=[parameter[i] for i in range(self.n_states + self.n_controls + 2 + 2 * self.N)],
                 initial_guess=[self.guess[i] for i in range (self.n_controls * self.N)])
+        self.elapsed = time.time() - t0
 
         return result
 
     def solve_optimization(self):
-        t0 = time.time()
+        #t0 = time.time()
         result = self.ncvxopt()
-        self.elapsed = time.time() - t0
+        #self.elapsed = time.time() - t0
         print(self.elapsed)
         u_star = np.full(self.n_controls * self.N, result.solution)
         self.guess = u_star
@@ -165,7 +166,7 @@ class NMPCKinematic:
             self.proj_center_Y = proj_center[1]
 
     def get_target_point(self, center_x, center_y):
-        self.target_point = perception_target_point(self.x0[0], self.x0[1], center_x, center_y, 130)
+        self.target_point = perception_target_point(self.x0[0], self.x0[1], center_x, center_y, 90)
 
     def ncvxopt(self):
         parameter = []

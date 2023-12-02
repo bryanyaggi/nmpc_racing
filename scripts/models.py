@@ -9,6 +9,14 @@ class KinematicModel:
         self.lf = 0.178
         self.L = self.lr + self.lf
 
+    def slip_angle(self, steering_angle):
+        return math.atan(self.lr / (self.lr + self.lf) * math.tan(steering_angle))
+    
+    def lateral_acceleration(self, control):
+        slip_angle = self.slip_angle(control[1])
+
+        return control[0] ** 2 * math.sin(slip_angle) / self.lr
+
     def step(self, state, control, dt=0.033):
         slip_angle = math.atan(self.lr / (self.lr + self.lf) * math.tan(control[1]))
 
@@ -112,6 +120,14 @@ class DynamicModel:
                         * math.sin(self.cr * math.atan(self.br * (-math.atan((xx5[i] - self.lr * xx6[i]) / xx4[i]))))))
 
         return xx1, xx2, xx3, xx4, xx5, xx6
+
+    def lateral_acceleration(self, x0, control):
+        a_lat = ((1/self.m) * (((self.Cm1 - self.Cm2 * x0[3]) * control[0] - self.Cm4 * x0[3]**2 - self.Cm3) \
+                * math.sin(control[1]) - self.m * x0[3] * x0[5] + (self.df * math.sin(self.cf * math.atan(self.bf \
+                * (-math.atan((x0[4] + self.lf * x0[5]) / x0[3]) + control[1]))) * math.cos(control[1]) + self.dr \
+                * math.sin(self.cr * math.atan(self.br * (-math.atan((x0[4] - self.lr * x0[5]) / x0[3])))))))
+
+        return a_lat
 
 class TestKinematicModel(unittest.TestCase):
     def testStep(self):

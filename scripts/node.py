@@ -58,12 +58,14 @@ def get_track_data(track_number='1'):
 
     return center_x, center_y, bound_x1, bound_y1, bound_x2, bound_y2
 
+track_number = '1'
+
 # Get track data
-center_x, center_y, bound_x1, bound_y1, bound_x2, bound_y2 = get_track_data('1')
+center_x, center_y, bound_x1, bound_y1, bound_x2, bound_y2 = get_track_data(track_number)
 
 # Open log file
 #f = open('/home/ubuntu/project/nmpc_racing/data/race_DATA.csv', 'w')
-f = open('/home/ubuntu/project/nmpc_racing/data/nmpc_' + track_number + '.csv', 'w')
+f = open('/home/ubuntu/project/nmpc_racing/data/nmpck_' + track_number + '.csv', 'w')
 writer = csv.writer(f)
 
 rospy.init_node('my_mpc_node',anonymous = True)
@@ -269,6 +271,6 @@ def callback(data):
 
 if __name__ == '__main__':
     #rospy.Subscriber("/car_1/ground_truth", Odometry, callback, queue_size=1)
-    rospy.Subscriber("/car_1/ground_truth", Odometry, runNMPC, queue_size=1)
-    #rospy.Subscriber("/car_1/ground_truth", Odometry, runNMPCKinematic, queue_size=1)
+    #rospy.Subscriber("/car_1/ground_truth", Odometry, runNMPC, queue_size=1)
+    rospy.Subscriber("/car_1/ground_truth", Odometry, runNMPCKinematic, queue_size=1)
     rospy.spin()

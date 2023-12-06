@@ -11,8 +11,6 @@ docker run \
   --gpus=all \
   -e DISPLAY=$DISPLAY \
   -e XAUTHORITY=$XAUTHORITY \
-  -e ROS_IP=$ROS_IP \
-  -e ROS_MASTER_URI=$ROS_MASTER_URI \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v $HOME/courses/MEEN689-Swami/project:/home/"$username"/project \
   -v /storage:/storage \

@@ -34,6 +34,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
         protobuf-compiler \
         python3-catkin-tools \
         python3-rosdep \
+        python3-tk \
         python3-vcstool \
         python3-wstool \
         qt5-default
@@ -66,6 +67,12 @@ WORKDIR ${HOME}
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="${HOME}/.cargo/bin:${PATH}"
 RUN pip3 install opengen
+
+# Install cvxpy
+RUN pip3 install --upgrade pip && pip3 install --upgrade numpy && pip3 install cvxpy
+
+# Install sympy
+RUN pip3 install sympy
 
 # Set default command
 CMD ["/bin/bash"]

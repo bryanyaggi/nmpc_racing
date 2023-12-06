@@ -117,8 +117,9 @@ state_msg.data = [0.0] * 6
 rate = rospy.Rate(30)
 
 nmpc = NMPC()
-nmpck = NMPCKinematic()
-mpc = MPC()
+#nmpck = NMPCKinematic()
+#mpc = MPC()
+mpcd = MPCDynamic()
 
 def runNMPC(data):
     now_rostime = rospy.get_rostime()
@@ -203,6 +204,69 @@ def runNMPCKinematic(data):
     
     rate.sleep()
 
+def runMPCDynamic(data):
+    now_rostime = rospy.get_rostime()
+    rospy.loginfo("Current time %f", now_rostime.secs)
+
+    # Get state
+    nmpc.get_state(data)
+    mpcd.get_state(data)
+    state_msg.data = mpcd.state.tolist()
+    pub_state.publish(state_msg)
+
+    # Get operating points
+    mpcd.get_operating_points(center_x, center_y)
+    
+    # Get rollout path projected on centerline for optimization track constraint
+    nmpc.project_rollout_to_centerline(center_x, center_y)
+    mpcd.project_rollout_to_centerline(center_x, center_y)
+    pub_rollout_path_projection.publish(xy_to_path(nmpc.proj_center_X, nmpc.proj_center_Y))
+    pub_rollout_path_projection_mpc.publish(xy_to_path(mpcd.proj_center[0], mpcd.proj_center[1]))
+
+    # Get target point
+    nmpc.get_target_point(center_x, center_y)
+    mpcd.get_target_point(center_x, center_y)
+    #target_point_display.point.x = nmpc.target_point[0]
+    #target_point_display.point.y = nmpc.target_point[1]
+    target_point_display.point.x = mpcd.target_point[0]
+    target_point_display.point.y = mpcd.target_point[1]
+    pub_target_point.publish(target_point_display)
+
+    # Solve optimization
+    nmpc.solve_optimization()
+    mpcd.solve_optimization()
+
+    # Trajectory rollout
+    nmpc.trajectory_rollout()
+    mpcd.trajectory_rollout()
+    mpcd.iter += 1
+
+    #velocity = nmpc.u_cl1 * 100
+    #steering_angle = nmpc.u_cl2
+    '''
+    if mpcd.iter < 20:
+        velocity = mpcd.rollout_controls[0, 0] * 0.1
+        steering_angle = mpcd.rollout_controls[1, 0] * 0.1
+    else:
+        velocity = mpcd.rollout_controls[0, 0] * 100
+        steering_angle = mpcd.rollout_controls[1, 0]
+    '''
+    velocity = mpcd.rollout_controls[0, 0] * 100
+    steering_angle = mpcd.rollout_controls[1, 0]
+    control_vehicle(velocity, steering_angle)
+
+    pub_rollout_path.publish(xy_to_path(nmpc.xx1, nmpc.xx2))
+    pub_rollout_path_mpc.publish(xy_to_path(mpcd.rollout_states[0], mpcd.rollout_states[1]))
+
+    # Update log
+    #row = [now_rostime, nmpc.x0[0], nmpc.x0[1], nmpc.x0[2], nmpc.x03, nmpc.x0[4], nmpc.x0[5], nmpc.u_cl1, nmpc.u_cl2,
+    #        nmpc.elapsed]
+    row = [now_rostime, mpcd.state[0], mpcd.state[1], mpcd.state[2], mpcd.x03, mpcd.state[4], mpcd.state[5],
+            mpcd.rollout_controls[0, 0], mpcd.rollout_controls[0, 1], nmpc.elapsed]
+    writer.writerow(row)
+
+    rate.sleep()
+
 def callback(data):
     now_rostime = rospy.get_rostime()
     rospy.loginfo("Current time %f", now_rostime.secs)
@@ -236,7 +300,7 @@ def callback(data):
 
     # Solve optimization
     nmpc.solve_optimization()
-    #mpc.solve_optimization()
+    mpc.solve_optimization()
     #print('Solved MPC optimization!')
 
     # Convert controls for MPC
@@ -272,5 +336,6 @@ def callback(data):
 if __name__ == '__main__':
     #rospy.Subscriber("/car_1/ground_truth", Odometry, callback, queue_size=1)
     #rospy.Subscriber("/car_1/ground_truth", Odometry, runNMPC, queue_size=1)
-    rospy.Subscriber("/car_1/ground_truth", Odometry, runNMPCKinematic, queue_size=1)
+    #rospy.Subscriber("/car_1/ground_truth", Odometry, runNMPCKinematic, queue_size=1)
+    rospy.Subscriber("/car_1/ground_truth", Odometry, runMPCDynamic, queue_size=1)
     rospy.spin()

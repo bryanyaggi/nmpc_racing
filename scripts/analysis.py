@@ -137,6 +137,6 @@ def plot_tracks(filenames):
 if __name__ == '__main__':
     #plot_data('/home/ubuntu/project/nmpc_racing/data/nmpc_1.csv', '1', 'nmpc')
     #plot_data('/home/ubuntu/project/nmpc_racing/data/nmpck_1.csv', '1', 'nmpck')
-    plot_tracks(['/home/ubuntu/project/nmpc_racing/data/nmpc_1.csv',
-                 '/home/ubuntu/project/nmpc_racing/data/nmpc_2.csv',
-                 '/home/ubuntu/project/nmpc_racing/data/nmpc_3.csv'])
+    plot_tracks(['/home/ubuntu/project/nmpc_racing/data/nmpck_1.csv',
+                 '/home/ubuntu/project/nmpc_racing/data/nmpck_2.csv',
+                 '/home/ubuntu/project/nmpc_racing/data/nmpck_3.csv'])

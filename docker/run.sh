@@ -12,7 +12,7 @@ docker run \
   -e DISPLAY=$DISPLAY \
   -e XAUTHORITY=$XAUTHORITY \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
-  -v $HOME/courses/MEEN689-Swami/project:/home/"$username"/project \
+  -v $HOME/courses/MEEN689-601-project:/home/"$username"/project \
   -v /storage:/storage \
   --name project-v1 \
   --user "$username" \

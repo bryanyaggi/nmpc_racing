@@ -20,6 +20,7 @@ class NMPC:
     def __init__(self):
         self.N = 50
         self.T = 0.033
+        self.lookahead = 90
         self.n_states = 6
         self.n_controls = 2
         self.mpciter = 0
@@ -79,7 +80,7 @@ class NMPC:
             self.proj_center_Y = proj_center[1]
 
     def get_target_point(self, center_x, center_y):
-        self.target_point = perception_target_point(self.x0[0], self.x0[1], center_x, center_y, 90)
+        self.target_point = perception_target_point(self.x0[0], self.x0[1], center_x, center_y, self.lookahead)
 
     def ncvxopt(self):
         parameter = []
@@ -512,8 +513,8 @@ class MPC:
     Returns horizon points corresponding to steps k = 1 to H+1 for applying track constraint
     '''
     def project_rollout_to_centerline(self, center_x, center_y):
-        #if self.iter < 1:
-        if True:
+        if self.iter < 1:
+        #if True:
             self.proj_center = np.zeros((2, self.horizon))
             '''
             path = find_the_center_line(np.linspace(0, 1, self.horizon), np.zeros(self.horizon), center_x, center_y)
@@ -581,9 +582,10 @@ def cvxopt(model, state, prev_control, target_point, proj_center, operating_poin
     x = cp.Variable((3, horizon + 1))
     u = cp.Variable((2, horizon))
 
-    Q1 = np.eye(2) * 10
-    Q2 = np.eye(2) * 10 # 10
-    d = np.ones(2) * 2
+    Q1 = np.eye(2) * 10.0
+    Q2 = np.eye(2) * 10.0 # 10
+    d = np.ones(2) * 2.0
+    du = np.array([2.0, 0.025])
 
     cost = 0
     constraints = []
@@ -594,13 +596,15 @@ def cvxopt(model, state, prev_control, target_point, proj_center, operating_poin
         A, B, C = model.get_linear_model(yaw, velocity, steering_angle)
         constraints += [x[:, i + 1] == A @ x[:, i] + B @ u[:, i] + C] # dynamics
 
-        if i == 0:
-            cost += cp.quad_form(u[:, i] - prev_control, Q2) # control change cost
-        else:
-            cost += cp.quad_form(u[:, i] - u[:, i - 1], Q2) # control change cost
-            # stay on track
-            constraints += [x[:2, i] <= proj_center[:, i - 1] + d]
-            constraints += [x[:2, i] >= proj_center[:, i - 1] - d]
+        cost += cp.quad_form(u[:, i] - prev_control, Q2) # control change cost
+        #constraints += [u[:, i] - prev_control <= du] # control change constraint
+
+        # stay on track
+        #constraints += [x[:2, i] <= proj_center[:, i - 1] + d]
+        #constraints += [x[:2, i] >= proj_center[:, i - 1] - d]
+
+        #constraints += [] # lateral acceleration constraint
+        prev_control = u[:, i]
 
     cost += cp.quad_form(x[:2, horizon] - target_point, Q1) # final point cost
 

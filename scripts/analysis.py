@@ -33,12 +33,13 @@ class Trajectory:
     def get_trajectory(self):
         self.data = np.genfromtxt(self.filename, delimiter=',', dtype=float)
 
-    def get_lap_indices(self, laps=3):
+    def get_lap_indices(self, laps=2):
         indices = [0]
         start = self.data[0, 1:3]
-        while(len(indices) < laps):
+        while(len(indices) < laps + 1):
             imin = indices[-1] + 100
             imax = min(indices[-1] + 700, self.data.shape[0])
+            #imax = min(indices[-1] + 1200, self.data.shape[0])
             index = (np.linalg.norm(self.data[imin:imax, 1:3] - start, axis=1)).argmin() + imin
             indices.append(index)
             print(indices)
@@ -72,6 +73,8 @@ class Trajectory:
         end = self.lap_indices[2] + 1
         x = self.data[:end, 1]
         y = self.data[:end, 2]
+        #x = self.data[:, 1]
+        #y = self.data[:, 2]
         points = np.array([x, y]).T.reshape(-1, 1, 2)
         segments = np.concatenate([points[:-1], points[1:]], axis=1)
         
@@ -85,6 +88,22 @@ class Trajectory:
         line = ax.add_collection(lc)
         cbar = fig.colorbar(line, ax=ax, pad=0)
         cbar.set_label('Velocity [m/s]')
+
+    def plot_controls(self, fig, ax):
+        start = self.lap_indices[1]
+        end = self.lap_indices[2] + 1
+        u1 = self.data[start:end, 7]
+        u2 = self.data[start:end, 8]
+        #u1 = self.data[:, 7]
+        #u2 = self.data[:, 8]
+
+        ax.plot(u1, color='blue', label='\Tilde{d}')
+        ax.tick_params(axis='y', labelcolor='blue')
+        ax.set_ylim((-0.05, 1.05))
+        axt = ax.twinx()
+        axt.plot(u2, color='red', label='\delta')
+        axt.tick_params(axis='y', labelcolor='red')
+        axt.set_ylim((-math.pi / 5.5, math.pi / 5.5))
 
 def plot_data(filename, track_number, controller_type):
     fig, ax = plt.subplots()
@@ -134,9 +153,59 @@ def plot_tracks(filenames):
     plt.tight_layout()
     plt.show()
 
+def plot_controls(filenames):
+    aspect_ratio = 4
+    scale = 6
+    fig, axs = plt.subplots(1, len(filenames), squeeze=False, figsize=(aspect_ratio * scale, scale))
+    
+    SMALL_SIZE = 12
+    LARGE_SIZE = 18
+    plt.rc('font', size=LARGE_SIZE)          # controls default text sizes
+    plt.rc('axes', titlesize=LARGE_SIZE)     # fontsize of the axes title
+    plt.rc('axes', labelsize=LARGE_SIZE)     # fontsize of the x and y labels
+    plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+    plt.rc('figure', titlesize=LARGE_SIZE)   # fontsize of the figure title
+
+    for i in range(len(filenames)):
+        trajectory = Trajectory(filenames[i])
+        trajectory.get_trajectory()
+        trajectory.get_lap_indices()
+        trajectory.plot_controls(fig, axs[0, i])
+        axs[0, i].set_title('Track ' + str(i + 1))
+
+    plt.tight_layout()
+    plt.show()
+
+def get_lap_times(filenames):
+    for i in range(len(filenames)):
+        trajectory = Trajectory(filenames[i])
+        trajectory.get_trajectory()
+        trajectory.get_lap_indices()
+        trajectory.get_lap_times()
+
 if __name__ == '__main__':
     #plot_data('/home/ubuntu/project/nmpc_racing/data/nmpc_1.csv', '1', 'nmpc')
     #plot_data('/home/ubuntu/project/nmpc_racing/data/nmpck_1.csv', '1', 'nmpck')
+    '''
     plot_tracks(['/home/ubuntu/project/nmpc_racing/data/nmpck_1.csv',
                  '/home/ubuntu/project/nmpc_racing/data/nmpck_2.csv',
                  '/home/ubuntu/project/nmpc_racing/data/nmpck_3.csv'])
+    plot_tracks(['/home/ubuntu/project/nmpc_racing/data/lookahead/nmpc_short_1.csv',
+                 '/home/ubuntu/project/nmpc_racing/data/lookahead/nmpc_short_2.csv',
+                 '/home/ubuntu/project/nmpc_racing/data/lookahead/nmpc_short_3.csv'])
+    '''
+    get_lap_times(['/home/ubuntu/project/nmpc_racing/data/nmpc_1.csv',
+                   '/home/ubuntu/project/nmpc_racing/data/nmpc_2.csv',
+                   '/home/ubuntu/project/nmpc_racing/data/nmpc_3.csv'])
+    get_lap_times(['/home/ubuntu/project/nmpc_racing/data/nmpck_1.csv',
+                   '/home/ubuntu/project/nmpc_racing/data/nmpck_2.csv',
+                   '/home/ubuntu/project/nmpc_racing/data/nmpck_3.csv'])
+    '''
+    filenames = ['/home/ubuntu/project/nmpc_racing/data/no_control_con/nmpc_1.csv',
+                 '/home/ubuntu/project/nmpc_racing/data/no_control_con/nmpc_2.csv',
+                 '/home/ubuntu/project/nmpc_racing/data/no_control_con/nmpc_3.csv']
+    plot_tracks(filenames)
+    plot_controls(filenames)
+    '''

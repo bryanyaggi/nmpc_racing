@@ -101,6 +101,7 @@ for i in range(N):
 	X[6*(i+1)+5] = st_next6
 	f1 = cs.vertcat(f1, (st1 - P[2*(i+1)+8])**2 + (st2 - P[2*(i+1)+9])**2 )
 	f1 = cs.vertcat(f1, con1-preU1, con2-preU2, st_next4) 
+	f1 = cs.vertcat(f1, st_next4) 
 	preU1 = con1
 	preU2 = con2
 	obj = obj + ( ((-cs.atan((st5+lf*st6)/st4)+con2)) - (-cs.atan((st5-lr*st6)/st4)) )**2 

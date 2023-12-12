@@ -4,7 +4,7 @@ import math
 import numpy as np
 import time
 
-from models import DynamicModel, KinematicModel, DynamicModelSymPy
+from models import DynamicModel, KinematicModel, DynamicModelSymPy, KinematicModelSymPy
 from track_utils import *
 
 import sys
@@ -213,6 +213,226 @@ class NMPCKinematic:
 
         self.mpciter += 1
 
+class MPCKinematic:
+    def __init__(self):
+        self.model = KinematicModelSymPy()
+        self.horizon = 50
+        self.lookahead = 90 #80
+        self.dt = 0.033
+        self.n_states = 3
+        self.n_controls = 2
+        self.rollout_controls = np.zeros((self.n_controls, self.horizon))
+        self.rollout_states = np.zeros((self.n_states, self.horizon + 1))
+        self.operating_point_states = None
+        self.operating_point_controls = None
+        self.proj_center = None
+        self.target_point = None
+        self.state = np.zeros(self.n_states)
+        self.iter = 0
+
+    def get_state(self, odom):
+        self.state[0] = odom.pose.pose.position.x
+        self.state[1] = odom.pose.pose.position.y
+        _, _, yaw = euler_from_quaternion(odom.pose.pose.orientation.x, odom.pose.pose.orientation.y,
+                odom.pose.pose.orientation.z, odom.pose.pose.orientation.w)
+        if yaw < -math.pi:
+            yaw += 2 * math.pi
+        elif yaw > math.pi:
+            yaw -= 2 * math.pi
+        self.state[2] = yaw
+
+    '''
+    Returns horizon points corresponding to steps k = 0 to H for linearizing dynamics
+    '''
+    def get_operating_points(self, center_x, center_y):
+        if self.iter < 1:
+        #if True:
+            self.operating_point_states = np.zeros((3, self.horizon))
+
+            # Sample H+1 points, take first H
+            path = sample_centerline(self.state[0], self.state[1], center_x, center_y, points_in=self.lookahead + 1,
+                    points_out=self.horizon + 1)
+            self.operating_point_states[0], self.operating_point_states[1] = path[0][:-1], path[1][:-1]
+            # Calculate yaws
+            self.operating_point_states[2, :-1] = get_path_yaw(self.operating_point_states[0],
+                    self.operating_point_states[1])
+            self.operating_point_states[2, -1] = self.operating_point_states[2, -2]
+            # Assign controls
+            self.operating_point_controls = np.ones((2, self.horizon))
+            self.operating_point_controls[0] *= 3.0
+            self.operating_point_controls[1] *= 0.0
+        else:
+            # Use rollout ignoring old first elements
+            self.operating_point_states = self.rollout_states[:, 1:]
+            self.operating_point_controls[:, :-1] = self.rollout_controls[:, 1:]
+            self.operating_point_controls[:, -1] = self.rollout_controls[:, -1] # use last rollout control for last
+            # operating point
+
+    '''
+    Returns horizon points corresponding to steps k = 1 to H+1 for applying track constraint
+    '''
+    def project_rollout_to_centerline(self, center_x, center_y):
+        #if self.iter < 1:
+        if True:
+            self.proj_center = np.zeros((2, self.horizon))
+            '''
+            path = find_the_center_line(np.linspace(0, 1, self.horizon), np.zeros(self.horizon), center_x, center_y)
+            self.proj_center[0] = path[0]
+            self.proj_center[1] = path[1]
+            '''
+            path = sample_centerline(self.state[0], self.state[1], center_x, center_y, points_in=self.lookahead + 1,
+                    points_out=self.horizon + 1)
+            self.proj_center[0] = path[0][1:]
+            self.proj_center[1] = path[1][1:]
+            
+        else:
+            path = find_the_center_line(self.rollout_states[0, 1:], self.rollout_states[1, 1:], center_x,
+                    center_y)
+            self.proj_center[0] = path[0]
+            self.proj_center[1] = path[1]
+
+    def get_target_point(self, center_x, center_y):
+        self.target_point = perception_target_point(self.state[0], self.state[1], center_x, center_y, self.lookahead)
+
+    def solve_optimization_(self):
+        if self.iter < 1:
+            prev_control = np.zeros(2)
+        else:
+            prev_control = self.rollout_controls[:, 0]
+        t0 = time.time()
+        status, solution = cvxopt(self.model, self.state, prev_control, self.target_point, self.proj_center,
+                self.operating_point_states, self.operating_point_controls)
+        if status == 'optimal':
+            self.rollout_controls = solution
+        print('MPC optimization time: %f' %(time.time() - t0))
+        print('MPC status: %s' %status)
+    
+    def solve_optimization(self):
+        if self.iter < 1:
+            self.define_parameters()
+            self.construct_problem()
+            prev_control = np.zeros(2)
+        else:
+            prev_control = self.rollout_controls[:, 0]
+
+        # Update parameters
+        if True:
+            # Use current operating point for all steps
+            for i in range(self.horizon):
+                state = self.operating_point_states[:, 0]
+                control = self.operating_point_controls[:, 0]
+                control[1] = 0
+                self.A.value[:, i * self.n_states : i * self.n_states + self.n_states], \
+                        self.B.value[:, i * self.n_controls : i * self.n_controls + self.n_controls], \
+                        self.C.value[:, i] = self.model.get_linear_model(state, control)
+            
+                #A, B, C = self.model.get_linear_model(state, control)
+                #print(state)
+                #print(control)
+                #print(A)
+                #print(B)
+                #print(C)
+            #print(self.A.value)
+            #print(self.B.value)
+            #print(self.C.value)
+        else:
+            # Different operating point for each step
+            for i in range(self.horizon):
+                state = self.operating_point_states[:, i]
+                control = self.operating_point_controls[:, i]
+                #control[1] = 0
+                self.A.value[:, i * self.n_states : i * self.n_states + self.n_states], \
+                        self.B.value[:, i * self.n_controls : i * self.n_controls + self.n_controls], \
+                        self.C.value[:, i] = self.model.get_linear_model(state, control)
+                #print(state)
+                #print(control)
+        self.x.value = self.state
+        print('state: %s' %self.x.value)
+        self.u_prev.value = prev_control
+        self.p_t.value = np.array(self.target_point)
+        print('target point: %s' %self.p_t.value)
+        self.p_c.value = self.proj_center
+
+        t0 = time.time()
+        solver = cp.CLARABEL
+        #solver = cp.SCIPY
+        self.problem.solve(solver=solver, verbose=False, warm_start=True) # time_limit=1.0
+        if self.problem.status == 'optimal':
+            self.rollout_controls = self.U.value
+        print('MPC optimization time: %f' %(time.time() - t0))
+        print('MPC status: %s' %self.problem.status)
+
+    def define_parameters(self):
+        shape = (self.n_states, self.n_states * self.horizon)
+        self.A = cp.Parameter(shape, value=np.zeros(shape, dtype=np.float64))
+        shape = (self.n_states, self.n_controls * self.horizon)
+        self.B = cp.Parameter(shape, value=np.zeros(shape, dtype=np.float64))
+        shape = (self.n_states, self.horizon)
+        self.C = cp.Parameter(shape, value=np.zeros(shape, dtype=np.float64))
+        self.x = cp.Parameter(self.n_states, value=np.zeros(self.n_states, dtype=np.float64)) # state
+        self.u_prev = cp.Parameter(self.n_controls, value=np.zeros(self.n_controls, dtype=np.float64)) # previous control
+        self.p_t = cp.Parameter(2, value=np.zeros(2, dtype=np.float64)) # target point
+        shape = (2, self.horizon)
+        self.p_c = cp.Parameter(shape, value=np.zeros(shape, dtype=np.float64)) # centerline projection
+
+    def construct_problem(self):
+        self.X = cp.Variable(self.rollout_states.shape,
+                value=np.zeros(self.rollout_states.shape, dtype=np.float64))
+        self.U = cp.Variable(self.rollout_controls.shape,
+                value=np.zeros(self.rollout_controls.shape, dtype=np.float64))
+
+        Q1 = np.eye(2) * 10. #100.
+        #Q2 = np.array([[1., 0.], [0., 10.]])
+        #Q2 = 0.0001 * np.array([[1., 0.], [0., 10.]])
+        Q2 = 0. * np.array([[1., 0.], [0., 1.]]) # 5e-6
+        Q3 = np.array([[1, 0], [0, 1]])
+        trackd = np.ones(2) * 3.1 #2.25 #3.1 #(2 - 0.24) 1.76
+        dd = 2.5
+        dsteer = 0.025
+
+        u_prev = self.u_prev
+
+        cost = 0
+        constraints = []
+        for i in range(self.horizon):
+            constraints += [self.X[:, i + 1] == \
+                    self.A[:, i * self.n_states : i * self.n_states + self.n_states] @ self.X[:, i] \
+                    + self.B[:, i * self.n_controls : i * self.n_controls + self.n_controls] @ self.U[:, i] \
+                    + self.C[:, i]] # dynamics
+              
+            # control change cost
+            cost += cp.quad_form(self.U[:, i] - u_prev, Q2)
+
+            # lateral acceleration cost
+            #cost += cp.quad_form(self.U[:, i], Q3)
+            
+            # control change constraints
+            #constraints += [self.U[0, i] - u_prev[0] >= -dd]
+            #constraints += [self.U[0, i] - u_prev[0] <= dd]
+            #constraints += [self.U[1, i] - u_prev[1] >= -dsteer]
+            #constraints += [self.U[1, i] - u_prev[1] <= dsteer]
+            u_prev = self.U[:, i] # update previous control
+            
+            # stay on track
+            constraints += [self.X[:2, i] <= self.p_c[:, i] + trackd]
+            constraints += [self.X[:2, i] >= self.p_c[:, i] - trackd]
+
+        cost += cp.quad_form(self.X[:2, self.horizon] - self.p_t, Q1) # final point cost
+
+        constraints += [self.X[:, 0] == self.x] # initial state
+        constraints += [self.U[0, :] >= 0] # v limits
+        constraints += [self.U[0, :] <= 5]
+        constraints += [self.U[1, :] >= -math.pi / 6] # steering angle limits
+        constraints += [self.U[1, :] <= math.pi / 6]
+
+        self.problem = cp.Problem(cp.Minimize(cost), constraints)
+
+    '''
+    Updates rollout states using model and rollout controls
+    '''
+    def trajectory_rollout(self):
+        self.model.rollout(self.state, self.rollout_controls, self.rollout_states)
+ 
 class MPCDynamic:
     def __init__(self):
         self.model = DynamicModelSymPy()
@@ -634,7 +854,7 @@ class TestOptimization(unittest.TestCase):
                           delimiter=',', dtype=float)
         self.center_y = csv_file[:].tolist()
     
-    def plot(self, start_point, target_point, rollout_points, projection_points):
+    def plot(self, start_point, target_point, rollout_points, projection_points, solved_points=None):
         import matplotlib.pyplot as plt
 
         fig, ax = plt.subplots()
@@ -646,6 +866,9 @@ class TestOptimization(unittest.TestCase):
         ax.scatter(start_point[0], start_point[1], color='green')
         ax.scatter(target_point[0], target_point[1], color='red')
         ax.plot(rollout_points[0], rollout_points[1], color='blue')
+
+        if solved_points is not None:
+            ax.plot(solved_points[0], solved_points[1], color='purple')
 
         ax.axis('equal')
         plt.show()
@@ -714,3 +937,26 @@ class TestOptimization(unittest.TestCase):
             self.plot(start_point, target_point, rollout_points, projection_points)
 
             mpcd.state = mpcd.rollout_states[:, 1]
+    
+    def testConvexKinematic(self):
+        c = MPCKinematic()
+        c.state = np.zeros(3)
+        for i in range(100):
+            #print(c.state)
+            c.get_operating_points(self.center_x, self.center_y)
+            c.project_rollout_to_centerline(self.center_x, self.center_y)
+            c.get_target_point(self.center_x, self.center_y)
+            c.solve_optimization()
+            #print(c.rollout_controls[:, 0])
+            c.trajectory_rollout()
+            c.iter += 1
+
+            start_point = c.state[:2]
+            target_point = c.target_point
+            rollout_points = c.rollout_states[:2]
+            projection_points = c.proj_center
+            solved_points = c.X.value[:2]
+            self.plot(start_point, target_point, rollout_points, projection_points, solved_points)
+
+            c.state = c.rollout_states[:, 1]
+            print('state: %s' %c.state)

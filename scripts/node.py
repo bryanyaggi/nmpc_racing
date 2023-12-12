@@ -59,7 +59,7 @@ class Node:
             self.controller = NMPCKinematic()
             callback = self.runNmpcKinematic
         elif controller == 'mpc-kinematic':
-            self.controller = MPC()
+            self.controller = MPCKinematic()
             callback = self.runMpcKinematic
         elif controller == 'mpc-dynamic':
             self.controller = MPCDynamic()
@@ -273,6 +273,9 @@ class Node:
         self.rate.sleep()
 
     def runMpcKinematic(self, data):
+        if self.delay():
+            return
+
         now_rostime = rospy.get_rostime()
         rospy.loginfo("Current time %f", now_rostime.secs)
 
@@ -308,14 +311,16 @@ class Node:
         self.pub_rollout_path.publish(xy_to_path(self.controller.rollout_states[0], self.controller.rollout_states[1]))
 
         # Update log
-        #self.writer.writerow(row)
+        row = [now_rostime, self.controller.state[0], self.controller.state[1], self.controller.state[2],
+                self.controller.rollout_controls[0, 0], self.controller.rollout_controls[0, 1]]
+        self.writer.writerow(row)
 
         self.rate.sleep()
 
 if __name__ == '__main__':
     rospy.init_node('controller_node', anonymous=True)
-    node = Node(track_number='1', controller='nmpc-baseline')
+    #node = Node(track_number='1', controller='nmpc-baseline')
     #node = Node(track_number='1', controller='nmpc-kinematic')
     #node = Node(track_number='1', controller='mpc-dynamic')
-    #node = Node(track_number='1', controller='mpc-kinematic')
+    node = Node(track_number='1', controller='mpc-kinematic')
     rospy.spin()

@@ -3,6 +3,7 @@ import math
 import sympy as sp
 from sympy.abc import phi, omega, delta
 x, y, vx, vy, d, t = sp.symbols('x y vx vy d t') # remaining state and control variables
+v = sp.symbols('v') # remaining state and control variables
 
 import unittest
 
@@ -71,6 +72,71 @@ class KinematicModel:
 
         return A, B, C
 
+    def rollout(self, state, rollout_controls, rollout_states, dt=0.033):
+        rollout_states[:, 0] = state
+
+        for i in range(rollout_states.shape[1] - 1):
+            rollout_states[:, i + 1] = self.step(rollout_states[:, i], rollout_controls[:, i], dt=dt)
+
+class KinematicModelSymPy:
+    def __init__(self):
+        self.create()
+        
+    def create(self):
+        # Constants
+        lr = 0.147
+        lf = 0.178
+        L = lr + lf
+
+        # Slip angle
+        beta = sp.atan(sp.tan(delta) * lr / L)
+
+        f = sp.Matrix([v * sp.cos(phi + beta),
+                       v * sp.sin(phi + beta),
+                       v * sp.cos(beta) * sp.tan(delta) / L])
+
+        # Lambda function for dynamics
+        self.f = sp.lambdify([x, y, phi, v, delta], f, 'numpy')
+        
+        # Jacobians
+        Jx = f.jacobian([x, y, phi])
+        Ju = f.jacobian([v, delta])
+        print(Jx)
+        print(Ju)
+
+        # Lambda functions for linearized matrices
+        args = [x, y, phi, v, delta, t]
+        self.A = sp.lambdify(args, sp.eye(3) + Jx * t, 'numpy')
+        self.B = sp.lambdify(args, Ju * t, 'numpy')
+        self.C = sp.lambdify(args,
+                (f - Jx * sp.Matrix([x, y, phi]) - Ju * sp.Matrix([v, delta])) * t,
+                'numpy')
+    
+    '''
+    state is operating point state
+    control is operating point control
+    '''
+    def get_linear_model(self, state, control, dt=0.033):
+        args = (state[0], state[1], state[2], control[0], control[1], dt)
+        A = self.A(*args)
+        B = self.B(*args)
+        C = self.C(*args)
+        Anp = np.array(A).astype(np.float64)
+        Bnp = np.array(B).astype(np.float64)
+        Cnp = np.array(C).astype(np.float64).ravel()
+        
+        return Anp, Bnp, Cnp
+
+    def step(self, state, control, dt=0.033):
+        f = self.f(state[0], state[1], state[2], control[0], control[1])
+        fnp = np.array(f).astype(np.float64)
+        next_state = state + fnp.T * dt
+
+        return next_state
+    
+    '''
+    Updates rollout states using rollout controls
+    '''
     def rollout(self, state, rollout_controls, rollout_states, dt=0.033):
         rollout_states[:, 0] = state
 
@@ -255,4 +321,16 @@ class TestDynamicModelSymPy(unittest.TestCase):
         print(A.shape)
         print(B.shape)
         print(C.shape)
+        print(C)
+
+class TestKinematicModelSymPy(unittest.TestCase):
+    def testCreate(self):
+        m = KinematicModelSymPy()
+        #args = [x, y, phi, v, delta, t]
+        args = [0, 0, 0, 1, 0, 0.3]
+        A = m.A(*args)
+        B = m.B(*args)
+        C = m.C(*args)
+        print(A)
+        print(B)
         print(C)

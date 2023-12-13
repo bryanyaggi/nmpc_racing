@@ -319,8 +319,8 @@ class Node:
 
 if __name__ == '__main__':
     rospy.init_node('controller_node', anonymous=True)
-    #node = Node(track_number='1', controller='nmpc-baseline')
+    node = Node(track_number='1', controller='nmpc-baseline')
     #node = Node(track_number='1', controller='nmpc-kinematic')
     #node = Node(track_number='1', controller='mpc-dynamic')
-    node = Node(track_number='1', controller='mpc-kinematic')
+    #node = Node(track_number='1', controller='mpc-kinematic')
     rospy.spin()

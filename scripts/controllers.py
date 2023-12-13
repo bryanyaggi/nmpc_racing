@@ -384,8 +384,9 @@ class MPCKinematic:
         Q1 = np.eye(2) * 10. #100.
         #Q2 = np.array([[1., 0.], [0., 10.]])
         #Q2 = 0.0001 * np.array([[1., 0.], [0., 10.]])
-        Q2 = 0. * np.array([[1., 0.], [0., 1.]]) # 5e-6
-        Q3 = np.array([[1, 0], [0, 1]])
+        Q2 = 1e0 * np.array([[1., 0.], [0., 1.]]) # 5e-6
+        Q3 = 1e-4 * np.array([[1, 0], [0, 1]])
+        #Q4 = 1. * np.array([[1, 0], [0, 1]])
         trackd = np.ones(2) * 3.1 #2.25 #3.1 #(2 - 0.24) 1.76
         dd = 2.5
         dsteer = 0.025
@@ -403,8 +404,11 @@ class MPCKinematic:
             # control change cost
             cost += cp.quad_form(self.U[:, i] - u_prev, Q2)
 
+            # reference trajectory path cost
+            cost += cp.quad_form(self.X[:2, i] - self.p_c[:, i], Q3)
+
             # lateral acceleration cost
-            #cost += cp.quad_form(self.U[:, i], Q3)
+            #cost += cp.quad_form(self.U[:, i], Q4)
             
             # control change constraints
             #constraints += [self.U[0, i] - u_prev[0] >= -dd]
@@ -414,13 +418,13 @@ class MPCKinematic:
             u_prev = self.U[:, i] # update previous control
             
             # stay on track
-            constraints += [self.X[:2, i] <= self.p_c[:, i] + trackd]
-            constraints += [self.X[:2, i] >= self.p_c[:, i] - trackd]
+            #constraints += [self.X[:2, i] <= self.p_c[:, i] + trackd]
+            #constraints += [self.X[:2, i] >= self.p_c[:, i] - trackd]
 
         cost += cp.quad_form(self.X[:2, self.horizon] - self.p_t, Q1) # final point cost
 
         constraints += [self.X[:, 0] == self.x] # initial state
-        constraints += [self.U[0, :] >= 0] # v limits
+        constraints += [self.U[0, :] >= 2] # v limits
         constraints += [self.U[0, :] <= 5]
         constraints += [self.U[1, :] >= -math.pi / 6] # steering angle limits
         constraints += [self.U[1, :] <= math.pi / 6]

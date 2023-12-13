@@ -33,7 +33,7 @@ class Trajectory:
     def get_trajectory(self):
         self.data = np.genfromtxt(self.filename, delimiter=',', dtype=float)
 
-    def get_lap_indices(self, laps=2):
+    def get_lap_indices(self, laps=3):
         indices = [0]
         start = self.data[0, 1:3]
         while(len(indices) < laps + 1):
@@ -70,15 +70,17 @@ class Trajectory:
         print(self.lateral_acceleration.max())
 
     def plot(self, fig, ax):
-        end = self.lap_indices[2] + 1
-        x = self.data[:end, 1]
-        y = self.data[:end, 2]
+        start = self.lap_indices[1]
+        end = self.lap_indices[3] + 1
+        x = self.data[start:end, 1]
+        y = self.data[start:end, 2]
         #x = self.data[:, 1]
         #y = self.data[:, 2]
         points = np.array([x, y]).T.reshape(-1, 1, 2)
         segments = np.concatenate([points[:-1], points[1:]], axis=1)
         
         v = self.data[:, 4]
+        v[-1] = 0
         norm = plt.Normalize(v.min(), v.max())
         #norm = plt.Normalize(self.lateral_acceleration.min(), self.lateral_acceleration.max())
         lc = LineCollection(segments, cmap='jet', norm=norm)
@@ -195,7 +197,6 @@ if __name__ == '__main__':
     plot_tracks(['/home/ubuntu/project/nmpc_racing/data/lookahead/nmpc_short_1.csv',
                  '/home/ubuntu/project/nmpc_racing/data/lookahead/nmpc_short_2.csv',
                  '/home/ubuntu/project/nmpc_racing/data/lookahead/nmpc_short_3.csv'])
-    '''
     get_lap_times(['/home/ubuntu/project/nmpc_racing/data/nmpc_1.csv',
                    '/home/ubuntu/project/nmpc_racing/data/nmpc_2.csv',
                    '/home/ubuntu/project/nmpc_racing/data/nmpc_3.csv'])
@@ -203,9 +204,8 @@ if __name__ == '__main__':
                    '/home/ubuntu/project/nmpc_racing/data/nmpck_2.csv',
                    '/home/ubuntu/project/nmpc_racing/data/nmpck_3.csv'])
     '''
-    filenames = ['/home/ubuntu/project/nmpc_racing/data/no_control_con/nmpc_1.csv',
-                 '/home/ubuntu/project/nmpc_racing/data/no_control_con/nmpc_2.csv',
-                 '/home/ubuntu/project/nmpc_racing/data/no_control_con/nmpc_3.csv']
+    filenames = ['/home/ubuntu/project/nmpc_racing/data/mpc-kinematic_1.csv',
+                 '/home/ubuntu/project/nmpc_racing/data/mpc-kinematic_2.csv',
+                 '/home/ubuntu/project/nmpc_racing/data/mpc-kinematic_3.csv']
     plot_tracks(filenames)
     plot_controls(filenames)
-    '''
